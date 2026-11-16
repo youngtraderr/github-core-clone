@@ -58,7 +58,7 @@ export function createApp(): Server {
         const answer = handleMcp(store, message); if (!answer) { res.writeHead(202, { 'x-github-request-id': `F${store.nextRequest++}` }); res.end(); return; } send(200, answer); return;
       }
       const gm = path.match(/^\/([^/]+)\/([^/]+)\.git\/(.*)$/);
-      if (gm) { const g = gitHandler(store, gm[1], gm[2], gm[3], method, await readRequest(req), url.search.slice(1)); res.writeHead(g.status, g.headers); res.end(g.body); return; }
+      if (gm) { const payload = method === 'POST' ? await readRequest(req) : Buffer.alloc(0); const g = gitHandler(store, gm[1], gm[2], gm[3], method, payload, url.search.slice(1)); res.writeHead(g.status, g.headers); res.end(g.body); return; }
       send(404, { message: 'Not Found' });
     } catch { if (!res.headersSent) send(400, { message: 'Bad Request' }); else res.destroy(); }
   });
