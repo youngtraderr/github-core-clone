@@ -1,9 +1,11 @@
+import { deriveViewerLogin } from './scenario.ts';
+
 export type Issue = { number: number; title: string; body: string; state: string; user: { login: string }; labels: unknown[]; comments: number };
 export type PullRequest = Issue & { head: { ref: string }; base: { ref: string }; merged: boolean };
 export type Repository = { owner: { login: string }; name: string; full_name: string; description: string; private: boolean; default_branch: string; issues: Map<number, Issue>; labels: Map<string, unknown>; pull_requests: Map<number, PullRequest>; comments: Map<number, unknown[]>; files: Map<string, string>; counter: number };
 export type ForgeStore = { repos: Map<string, Repository>; objects: Map<string, Buffer>; refs: Map<string, string>; nextRequest: number; login: string; token: string };
 export function createStore(): ForgeStore {
-  return { repos: new Map(), objects: new Map(), refs: new Map(), nextRequest: 1, login: process.env.MAKEFUN_GITHUB_LOGIN || 'qee', token: process.env.MAKEFUN_SHOP_TOKEN || 'test-token' };
+  return { repos: new Map(), objects: new Map(), refs: new Map(), nextRequest: 1, login: process.env.MAKEFUN_GITHUB_LOGIN || deriveViewerLogin(), token: process.env.MAKEFUN_SHOP_TOKEN || 'test-token' };
 }
 export const repoKey = (owner: string, name: string) => `${owner}/${name}`;
 export function getRepo(s: ForgeStore, owner: string, name: string): Repository | undefined { return s.repos.get(repoKey(owner, name)); }
