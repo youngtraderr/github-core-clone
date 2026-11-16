@@ -80,6 +80,30 @@ function closure(s: ForgeStore, roots: string[], depth: number, stops: Set<strin
   return { objects, boundary };
 }
 
+type FetchCache = { objects: number; refs: number; bytes: number; entries: Map<string, Buffer> };
+const fetchCaches = new WeakMap<ForgeStore, FetchCache>();
+export function cachedFetchResponse(s: ForgeStore, repo: string, lines: string[]): Buffer {
+  let cache = fetchCaches.get(s);
+  // Conservative global invalidation also covers every mutation of this repository's refs/objects.
+  if (!cache || cache.objects !== s.objects.version || cache.refs !== s.refs.version) {
+    cache = { objects: s.objects.version, refs: s.refs.version, bytes: 0, entries: new Map() };
+    fetchCaches.set(s, cache);
+  }
+  // Include every argument and negotiation capability; equivalent request order is not assumed.
+  const key = JSON.stringify([repo, lines]);
+  const cached = cache.entries.get(key);
+  if (cached) return cached;
+  const response = fetchResponse(s, lines);
+  if (response.length <= 8 * 1024 * 1024) {
+    while (cache.entries.size && (cache.entries.size >= 64 || cache.bytes + response.length > 8 * 1024 * 1024)) {
+      const oldest = cache.entries.keys().next().value!;
+      cache.bytes -= cache.entries.get(oldest)!.length; cache.entries.delete(oldest);
+    }
+    cache.entries.set(key, response); cache.bytes += response.length;
+  }
+  return response;
+}
+
 export function fetchResponse(s: ForgeStore, lines: string[]): Buffer {
   const v2 = lines.includes('command=fetch');
   const values = (prefix: string) => lines.filter(line => line.startsWith(prefix)).map(line => line.slice(prefix.length).split(' ')[0]);

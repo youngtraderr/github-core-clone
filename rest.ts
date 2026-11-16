@@ -1,9 +1,10 @@
+import { readRequest } from './request-body.ts';
 import { createRepo, getRepo, nextId, type ForgeStore } from './store.ts';
 import { storeObject, hashObject } from './git.ts';
 import { createIssue, createPull, addComment, mergePull, pullFiles, pathEntry } from './resources.ts';
 import { parseTree } from './core.ts';
 import { Buffer } from 'node:buffer';
-export async function body(req: any): Promise<any> { const chunks: Buffer[]=[]; for await(const c of req) chunks.push(Buffer.from(c)); return JSON.parse(Buffer.concat(chunks).toString()||'{}'); }
+export async function body(req: any): Promise<any> { return JSON.parse((await readRequest(req)).toString()||'{}'); }
 function treeEntries(s:ForgeStore,sha:string):{mode:string;name:string;oid:string}[]{const raw=s.objects.get(sha);if(!raw)return[];const z=raw.indexOf(0),d=raw.subarray(z+1),out=[] as {mode:string;name:string;oid:string}[];for(let i=0;i<d.length;){const sp=d.indexOf(32,i),nul=d.indexOf(0,sp+1);if(sp<0||nul<0||nul+21>d.length)break;out.push({mode:d.toString('ascii',i,sp),name:d.toString('utf8',sp+1,nul),oid:d.subarray(nul+1,nul+21).toString('hex')});i=nul+21;}return out;}
 function writeFileTree(s:ForgeStore,root:string|null,path:string,blob:string|null):string{const parts=path.split('/').filter(Boolean),name=parts.shift()!;const entries=treeEntries(s,root||'').filter(e=>e.name!==name);if(parts.length){const old=treeEntries(s,root||'').find(e=>e.name===name);entries.push({mode:'40000',name,oid:writeFileTree(s,old?.oid||null,parts.join('/'),blob)});}else if(blob)entries.push({mode:'100644',name,oid:blob});const bytes=Buffer.concat(entries.sort((a,b)=>a.name.localeCompare(b.name)).flatMap(e=>[Buffer.from(`${e.mode} ${e.name}\0`),Buffer.from(e.oid,'hex')]));return storeObject(s,'tree',bytes);}
 function extractTree(raw:Buffer):string|null{const text=raw.subarray(raw.indexOf(0)+1).toString();return text.match(/^tree ([0-9a-f]{40})/m)?.[1]||null;}

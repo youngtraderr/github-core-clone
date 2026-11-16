@@ -6,6 +6,7 @@
 // entry <-> env lifecycle and should stay as it is.
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { readRequest } from './request-body.ts';
 import { createStore } from './store.ts';
 import { body, isAuthorized, rest } from './rest.ts';
 import { graphql } from './graphql.ts';
@@ -30,11 +31,6 @@ function pathOf(req: IncomingMessage): string {
   }
 }
 
-async function readRequest(req: IncomingMessage): Promise<Buffer> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) chunks.push(Buffer.from(chunk));
-  return Buffer.concat(chunks);
-}
 
 /** Build the server. It binds nothing until the caller listens; the entry listens on an ephemeral port. */
 export function createApp(): Server {
