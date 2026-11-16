@@ -49,7 +49,7 @@ export function createApp(): Server {
       res.end(text);
     };
     if (method === 'GET' && path === '/healthz') { send(200, { ok: true }); return; }
-    if (!isAuthorized(req, store)) { send(401, { message: 'Bad credentials' }); return; }
+    if (!isAuthorized(req, store)) { send(401, { message: 'Bad credentials' }, { 'www-authenticate': 'Basic realm="Git Forge"' }); return; }
     try {
       if (path.startsWith('/api/v3') && rest(store, req, res, url)) return;
       if (path === '/api/graphql' && method === 'POST') { send(200, graphql(store, JSON.stringify(await body(req)))); return; }
@@ -58,7 +58,7 @@ export function createApp(): Server {
         const answer = handleMcp(store, message); if (!answer) { res.writeHead(202, { 'x-github-request-id': `F${store.nextRequest++}` }); res.end(); return; } send(200, answer); return;
       }
       const gm = path.match(/^\/([^/]+)\/([^/]+)\.git\/(.*)$/);
-      if (gm) { const payload = method === 'POST' ? await readRequest(req) : Buffer.alloc(0); const g = gitHandler(store, gm[1], gm[2], gm[3], method, payload, url.search.slice(1)); res.writeHead(g.status, g.headers); res.end(g.body); return; }
+      if (gm) { const payload = method === 'POST' ? await readRequest(req) : Buffer.alloc(0); console.log('git body complete', payload.length); const g = gitHandler(store, gm[1], gm[2], gm[3], method, payload, url.search.slice(1)); console.log('git reply',g.status,g.body.length,g.body.subarray(0,32).toString('hex')); res.writeHead(g.status, g.headers); res.end(g.body); return; }
       send(404, { message: 'Not Found' });
     } catch { if (!res.headersSent) send(400, { message: 'Bad Request' }); else res.destroy(); }
   });
