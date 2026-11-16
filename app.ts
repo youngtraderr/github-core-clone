@@ -30,6 +30,12 @@ function pathOf(req: IncomingMessage): string {
   }
 }
 
+async function readRequest(req: IncomingMessage): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks);
+}
+
 /** Build the server. It binds nothing until the caller listens; the entry listens on an ephemeral port. */
 export function createApp(): Server {
   const store = createStore();
@@ -52,7 +58,7 @@ export function createApp(): Server {
         const answer = handleMcp(store, message); if (!answer) { res.writeHead(202, { 'x-github-request-id': `F${store.nextRequest++}` }); res.end(); return; } send(200, answer); return;
       }
       const gm = path.match(/^\/([^/]+)\/([^/]+)\.git\/(.*)$/);
-      if (gm) { const g = gitHandler(store, gm[1], gm[2], gm[3]); res.writeHead(g.status, g.headers); res.end(g.body); return; }
+      if (gm) { const g = gitHandler(store, gm[1], gm[2], gm[3], method, await readRequest(req), url.search.slice(1)); res.writeHead(g.status, g.headers); res.end(g.body); return; }
       send(404, { message: 'Not Found' });
     } catch { if (!res.headersSent) send(400, { message: 'Bad Request' }); else res.destroy(); }
   });
