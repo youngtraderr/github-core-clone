@@ -6,6 +6,11 @@
 // entry <-> env lifecycle and should stay as it is.
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { createStore } from './store.ts';
+import { body, isAuthorized, rest } from './rest.ts';
+import { graphql } from './graphql.ts';
+import { handleMcp } from './mcp.ts';
+import { gitHandler } from './git.ts';
 
 const JSON_TYPE = 'application/json; charset=utf-8';
 
@@ -27,23 +32,28 @@ function pathOf(req: IncomingMessage): string {
 
 /** Build the server. It binds nothing until the caller listens; the entry listens on an ephemeral port. */
 export function createApp(): Server {
-  return createServer((req: IncomingMessage, res: ServerResponse) => {
+  const store = createStore();
+  return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const path = pathOf(req);
     const method = req.method ?? 'GET';
-
-    // The env's boot check calls this twice: 200 {"ok":true}.
-    if (method === 'GET' && path === '/healthz') {
-      sendJson(res, 200, { ok: true });
-      return;
-    }
-
-    // The GitHub API root: a 200 with the token's scopes, as api.github.com answers GET /.
-    if (method === 'GET' && (path === '/api/v3' || path === '/api/v3/')) {
-      sendJson(res, 200, { current_user_url: '/api/v3/user', rate_limit_url: '/api/v3/rate_limit' }, { 'x-oauth-scopes': 'repo, read:org' });
-      return;
-    }
-
-    // Everything else, every method: GitHub's 404 body.
-    sendJson(res, 404, { message: 'Not Found' });
+    const url = new URL(req.url ?? '/', 'http://entry');
+    const send = (status: number, value: unknown, headers: Readonly<Record<string, string>> = {}) => {
+      const text = `${JSON.stringify(value)}\n`;
+      res.writeHead(status, { 'content-type': JSON_TYPE, 'content-length': Buffer.byteLength(text), 'x-github-request-id': `F${store.nextRequest++}`, ...headers });
+      res.end(text);
+    };
+    if (method === 'GET' && path === '/healthz') { send(200, { ok: true }); return; }
+    if (!isAuthorized(req, store)) { send(401, { message: 'Bad credentials' }); return; }
+    try {
+      if (path.startsWith('/api/v3') && rest(store, req, res, url)) return;
+      if (path === '/api/graphql' && method === 'POST') { send(200, graphql(store, JSON.stringify(await body(req)))); return; }
+      if (path === '/mcp' && method === 'POST') {
+        let message: any; try { message = await body(req); } catch { send(400, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }); return; }
+        const answer = handleMcp(store, message); if (!answer) { res.writeHead(202, { 'x-github-request-id': `F${store.nextRequest++}` }); res.end(); return; } send(200, answer); return;
+      }
+      const gm = path.match(/^\/([^/]+)\/([^/]+)\.git\/(.*)$/);
+      if (gm) { const g = gitHandler(store, gm[1], gm[2], gm[3]); res.writeHead(g.status, g.headers); res.end(g.body); return; }
+      send(404, { message: 'Not Found' });
+    } catch { if (!res.headersSent) send(400, { message: 'Bad Request' }); else res.destroy(); }
   });
 }
