@@ -51,7 +51,7 @@ export function createApp(): Server {
     if (method === 'GET' && path === '/healthz') { send(200, { ok: true }); return; }
     if (!isAuthorized(req, store)) { send(401, { message: 'Bad credentials' }, { 'www-authenticate': 'Basic realm="Git Forge"' }); return; }
     try {
-      if (path.startsWith('/api/v3') && rest(store, req, res, url)) return;
+      if (path.startsWith('/api/v3') && await rest(store, req, res, url)) return;
       if (path === '/api/graphql' && method === 'POST') { send(200, graphql(store, JSON.stringify(await body(req)))); return; }
       if (path === '/mcp' && method === 'POST') {
         let message: any; try { message = await body(req); } catch { send(400, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }); return; }
